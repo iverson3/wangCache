@@ -1,6 +1,7 @@
 package wangcache
 
 import (
+	"7go/wangCache/wangcache/singleflight"
 	"fmt"
 	"log"
 	"sync"
@@ -36,6 +37,8 @@ type Group struct {
 	getter    Getter  // 缓存未命中时获取源数据的回调(callback)
 	mainCache cache
 	peers     PeerPicker
+	// use singleflight.Group to make sure that each key is only fetched once
+	loader *singleflight.Group
 }
 
 var (
@@ -56,6 +59,7 @@ func NewGroup(name string, cacheBytes int64, getter Getter) *Group {
 		name:      name,
 		getter:    getter,
 		mainCache: cache{cacheBytes: cacheBytes},
+		loader:    &singleflight.Group{},
 	}
 	groups[name] = g
 	return g
@@ -69,15 +73,17 @@ func GetGroup(name string) *Group {
 	return g
 }
 
+// 从当前group中获取缓存数据
 func (g *Group) Get(key string) (ByteView, error) {
 	if key == "" {
 		return ByteView{}, fmt.Errorf("key is required")
 	}
 	val, ok := g.mainCache.get(key)
 	if ok {
-		log.Printf("key [%s] cache hit\n", key)
+		log.Printf("[Server %s] key [%s] cache hit\n", g.peers.(*HTTPPool).self, key)
 		return val, nil
 	}
+	log.Printf("[Server %s] local cache is missed, now go to load data for key[%s]", g.peers.(*HTTPPool).self, key)
 	return g.load(key)
 }
 
@@ -89,25 +95,35 @@ func (g *Group) RegisterPeers(peers PeerPicker) {
 }
 
 func (g *Group) load(key string) (value ByteView, err error) {
-	// 分布式场景下会调用 getFromPeer从其他远程节点获取缓存值
-	if g.peers != nil {
-		// 根据key选择节点
-		peer, ok := g.peers.PickPeer(key)
-		if ok {
-			value, err := g.getFromPeer(peer, key)
-			if err == nil {
-				return value, nil
+	//将原来的 load相关逻辑，使用 g.loader.Do包裹起来，这样确保了并发场景下针对相同的 key，load过程只会调用一次
+	// 不管是远程调用获取还是本地获取，并发场景下，每个key都只会获取缓存值一次
+	viewi, err := g.loader.Do(key, func() (interface{}, error) {
+		if g.peers != nil {
+			// 根据key选择节点
+			if peer, ok := g.peers.PickPeer(key); ok {
+				// 分布式场景下会调用 getFromPeer从其他远程节点获取缓存值
+				if value, err := g.getFromPeer(peer, key); err == nil {
+					return value, nil
+				}
+				log.Printf("[wangCache] failed to get key[%s] from peer, error: %v", key, err)
 			}
-			log.Printf("[wangCache] failed to get key[%s] from peer, error: %v", key, err)
 		}
+		// 如果远程节点取不到缓存值或者目标节点就是本机节点，则直接从本地获取 (一般是从数据库中查询获取数据)
+		return g.getLocally(key)
+	})
+
+	if err == nil {
+		// viewi 是interface{}类型的，所以需要转类型
+		return viewi.(ByteView), nil
 	}
-	// 远程节点取不到缓存值，则直接从本地获取 (一般是从数据库中查询获取数据)
-	return g.getLocally(key)
+	return
 }
 
 // 访问远程节点，获取缓存值
 func (g *Group) getFromPeer(peer PeerGetter, key string) (ByteView, error) {
+	log.Printf("=====fetch data from remote node is starting====")
 	data, err := peer.Get(g.name, key)
+	log.Printf("=====fetch data from remote node is end====")
 	if err != nil {
 		return ByteView{}, err
 	}

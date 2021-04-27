@@ -53,13 +53,26 @@ func (p *HTTPPool) Set(peers ...string) {
 }
 
 // 包装了一致性哈希算法的 Get()方法，根据具体的 key，选择节点，返回节点对应的 HTTP 客户端
+// 实现PeerPicker接口
 func (p *HTTPPool) PickPeer(key string) (PeerGetter, bool) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
+	// 使用一致性hash算法根据key获取节点
 	peer := p.peers.Get(key)
+	// 如果返回的节点是自己(当前节点)，说明这个key就是由当前节点负责处理(包括缓存值的获取和存储)
+	// 所以不需要返回对应的httpGetter，因为key对应的缓存需要在当前节点中获取，不再需要请求其他节点
 	if peer != "" && peer != p.self {
+		log.Printf("[Server %s] select node is (%s)", p.self, peer)
 		return p.httpGetters[peer], true
+	}
+	// 该判断和输出主要是为了调试，无具体逻辑意义
+	if peer == p.self {
+		log.Printf("select node is self")
+	}
+	// 条件成立则说明当前哈希环上没有任何节点 (即所有cacheServer节点都挂掉了，但目前这个系统没有考虑缓存服务器宕机的情况以及相应的处理)
+	if peer == "" {
+		log.Printf("select node is null, there is no node to be selected.")
 	}
 
 	return nil, false
@@ -114,7 +127,7 @@ func (p *HTTPPool) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log.Println("get cache successfully.")
+	log.Printf("node [%s]: get cache successfully.", p.self)
 }
 
 

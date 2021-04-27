@@ -48,8 +48,11 @@ func startCacheServer(addr string, addrs []string, group *wangcache.Group) {
 // 启动一个 API服务（端口 9999），与用户进行交互，用户感知
 func startAPIServer(apiAddr string, group *wangcache.Group) {
 	http.Handle("/api", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		log.Printf("-----api request deal starting-----")
 		key := r.URL.Query().Get("key")
 		view, err := group.Get(key)
+
+		log.Printf("-----api request deal is end-----")
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return

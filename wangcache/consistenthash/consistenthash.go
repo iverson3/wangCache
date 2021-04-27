@@ -2,6 +2,7 @@ package consistenthash
 
 import (
 	"hash/crc32"
+	"log"
 	"sort"
 	"strconv"
 )
@@ -76,6 +77,7 @@ func (m *Map) Get(key string) string {
 		return ""
 	}
 
+	log.Printf("select node ... key = %s\n", key)
 	// 计算出key的哈希值
 	hash := int(m.hash([]byte(key)))
 	// 顺时针找到第一个匹配的虚拟节点的下标 idx
