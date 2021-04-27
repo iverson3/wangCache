@@ -6,17 +6,17 @@ import (
 	"sync"
 )
 
-// Group 是 GeeCache 最核心的数据结构，负责与用户的交互，并且控制缓存值存储和获取的流程
+//负责与外部交互，控制缓存存储和获取的主流程
 
 //                           是
-//接收 key --> 检查是否被缓存 -----> 返回缓存值 ⑴
-//                |  否                         是
-//                |-----> 是否应当从远程节点获取 -----> 与远程节点交互 --> 返回缓存值 ⑵
-//                            |  否
-//                            |-----> 调用`回调函数`，获取值并添加到缓存 --> 返回缓存值 ⑶
+// 接收 key --> 检查是否被缓存 -----> 返回缓存值 ⑴
+//                 |  否                         是
+//                 |-----> 是否应当从远程节点获取 -----> 与远程节点交互 --> 返回缓存值 ⑵
+//                             |  否
+//                             |-----> 调用`回调函数`，获取值并添加到缓存 --> 返回缓存值 ⑶
 
 
-//设计了一个回调函数(callback)，在缓存不存在时，调用这个函数，得到源数据
+// 设计了一个回调函数(callback)，在缓存不存在时，调用这个函数，得到源数据
 
 type Getter interface {
 	Get(key string) ([]byte, error)  // 通过指定的key获取数据
@@ -31,9 +31,10 @@ func (f GetterFunc) Get(key string) ([]byte, error) {
 }
 
 
+// Group是 wangCache最核心的数据结构，负责与用户的交互，并且控制缓存值存储和获取的流程
 type Group struct {
 	name      string  // 缓存的命名空间 (缓存的分类)
-	getter    Getter  // 即缓存未命中时获取源数据的回调(callback)
+	getter    Getter  // 缓存未命中时获取源数据的回调(callback)
 	mainCache cache
 }
 
@@ -60,6 +61,7 @@ func NewGroup(name string, cacheBytes int64, getter Getter) *Group {
 	return g
 }
 
+// 获取指定name的Group实例
 func GetGroup(name string) *Group {
 	mu.RLock()
 	defer mu.RUnlock()
@@ -80,11 +82,11 @@ func (g *Group) Get(key string) (ByteView, error) {
 }
 
 func (g *Group) load(key string) (value ByteView, err error) {
-	//分布式场景下会调用 getFromPeer 从其他节点获取
+	// 分布式场景下会调用 getFromPeer从其他节点获取
 	return g.getLocally(key)
 }
 
-//getLocally 调用用户回调函数 g.getter.Get()获取源数据
+// getLocally 调用用户回调函数 g.getter.Get()获取源数据
 func (g *Group) getLocally(key string) (ByteView, error) {
 	bytes, err := g.getter.Get(key)
 	if err != nil {

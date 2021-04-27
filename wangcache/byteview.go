@@ -1,5 +1,7 @@
 package wangcache
 
+//缓存值的抽象与封装
+
 //抽象出一个只读数据结构 ByteView 用来表示缓存值
 type ByteView struct {
 	b []byte  // 存储真实的缓存值；选择byte类型是为了能够支持任意的数据类型的存储，例如字符串、图片等。

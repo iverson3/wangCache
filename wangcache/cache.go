@@ -6,9 +6,9 @@ import (
 )
 
 type cache struct {
-	mu         sync.Mutex
+	mu         sync.Mutex  // 通过sync互斥锁实现并发控制
 	lru       *lru.Cache
-	cacheBytes int64     // 最大使用内存字节数
+	cacheBytes int64       // 最大使用内存字节数
 }
 
 func (c *cache) add(key string, value ByteView) {
