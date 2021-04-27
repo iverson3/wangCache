@@ -17,7 +17,6 @@ import (
 
 
 // 设计了一个回调函数(callback)，在缓存不存在时，调用这个函数，得到源数据
-
 type Getter interface {
 	Get(key string) ([]byte, error)  // 通过指定的key获取数据
 }
@@ -36,6 +35,7 @@ type Group struct {
 	name      string  // 缓存的命名空间 (缓存的分类)
 	getter    Getter  // 缓存未命中时获取源数据的回调(callback)
 	mainCache cache
+	peers     PeerPicker
 }
 
 var (
@@ -81,9 +81,37 @@ func (g *Group) Get(key string) (ByteView, error) {
 	return g.load(key)
 }
 
+func (g *Group) RegisterPeers(peers PeerPicker) {
+	if g.peers != nil {
+		panic("RegisterPeerPicker called more than once")
+	}
+	g.peers = peers
+}
+
 func (g *Group) load(key string) (value ByteView, err error) {
-	// 分布式场景下会调用 getFromPeer从其他节点获取
+	// 分布式场景下会调用 getFromPeer从其他远程节点获取缓存值
+	if g.peers != nil {
+		// 根据key选择节点
+		peer, ok := g.peers.PickPeer(key)
+		if ok {
+			value, err := g.getFromPeer(peer, key)
+			if err == nil {
+				return value, nil
+			}
+			log.Printf("[wangCache] failed to get key[%s] from peer, error: %v", key, err)
+		}
+	}
+	// 远程节点取不到缓存值，则直接从本地获取 (一般是从数据库中查询获取数据)
 	return g.getLocally(key)
+}
+
+// 访问远程节点，获取缓存值
+func (g *Group) getFromPeer(peer PeerGetter, key string) (ByteView, error) {
+	data, err := peer.Get(g.name, key)
+	if err != nil {
+		return ByteView{}, err
+	}
+	return ByteView{b: data}, nil
 }
 
 // getLocally 调用用户回调函数 g.getter.Get()获取源数据
