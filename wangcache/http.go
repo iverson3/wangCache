@@ -78,7 +78,8 @@ func (p *HTTPPool) PickPeer(key string) (PeerGetter, bool) {
 	return nil, false
 }
 
-var _ PeerPicker = (*HTTPPool)(nil)
+//确保这个类型(*HTTPPool)实现了这个接口(PeerPicker) 如果没有实现会报错的
+//var _ PeerPicker = (*HTTPPool)(nil)
 
 
 func (p *HTTPPool) Log(format string, v ...interface{}) {
@@ -142,6 +143,8 @@ type httpGetter struct {
 	baseURL string  // 表示将要访问的远程节点的地址
 }
 
+// 使用http.get访问指定的远程节点获取group和key对应的缓存数据
+// 实现PeerGetter接口
 func (h *httpGetter) Get(group string, key string) ([]byte, error) {
 	// 拼装请求的url
 	url := fmt.Sprintf(
@@ -168,7 +171,8 @@ func (h *httpGetter) Get(group string, key string) ([]byte, error) {
 	return data, nil
 }
 
-var _ PeerGetter = (*httpGetter)(nil)
+//确保这个类型(*httpGetter)实现了这个接口(PeerGetter) 如果没有实现会报错的
+//var _ PeerGetter = (*httpGetter)(nil)
 
 
 

@@ -74,6 +74,8 @@ func main() {
 	flag.BoolVar(&api, "api", false, "start a api server?")
 	flag.Parse()
 
+	// 定义了apiServer的地址和三个cacheServer的地址
+	// 这里属于硬编码，可以考虑使用配置文件的方式来动态修改
 	apiAddr := "http://localhost:9999"
 	addrMap := map[int]string{
 		8001: "http://localhost:8001",
